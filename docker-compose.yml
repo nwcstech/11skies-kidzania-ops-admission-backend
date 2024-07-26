@@ -9,7 +9,10 @@ services:
       args:
         NODE_ENV: ${NODE_ENV:-production}
     ports:
-      - 4443:${CONTAINER_PORT:-4000}
+      - target: ${CONTAINER_PORT:-4000}
+        published: ${HOST_PORT:-4443}
+        protocol: tcp
+        mode: host
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - POSTGRES_USER=${POSTGRES_USER}
