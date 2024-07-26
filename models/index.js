@@ -31,10 +31,12 @@ fs.readdirSync(modelsDirectory)
     db[model.name] = model;
   });
 
-// Define associations here if necessary
-db.CheckIn.hasMany(db.GtsTicket, { foreignKey: 'check_in_id' });
-db.CheckIn.hasMany(db.Bracelet, { foreignKey: 'check_in_id' });
-db.GtsTicket.belongsTo(db.CheckIn, { foreignKey: 'check_in_id' });
-db.Bracelet.belongsTo(db.CheckIn, { foreignKey: 'check_in_id' });
+// Define associations
+if (db.admission_check_ins) {
+  db.admission_check_ins.hasMany(db.admission_gts_tickets, { foreignKey: 'check_in_id' });
+  db.admission_check_ins.hasMany(db.admission_bracelets, { foreignKey: 'check_in_id' });
+  db.admission_gts_tickets.belongsTo(db.admission_check_ins, { foreignKey: 'check_in_id' });
+  db.admission_bracelets.belongsTo(db.admission_check_ins, { foreignKey: 'check_in_id' });
+}
 
 module.exports = db;

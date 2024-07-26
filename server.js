@@ -122,7 +122,7 @@ io.on("connection", (socket) => {
     try {
       if (data.type === "checkIn") {
         const checkIn = await db.sequelize.transaction(async (t) => {
-          const newCheckIn = await db.CheckIn.create({
+          const newCheckIn = await db.admission_check_ins.create({
             number_of_kids: data.numberOfKids,
             kidzo_checked: data.kidZoChecked,
             timestamp: new Date(data.timestamp),
@@ -130,7 +130,7 @@ io.on("connection", (socket) => {
 
           const gtsTickets = await Promise.all(
             data.gtsTickets.map(async (ticket) => {
-              const isDuplicate = await checkForDuplicates(ticket.code, db.GtsTicket);
+              const isDuplicate = await checkForDuplicates(ticket.code, db.admission_gts_tickets);
               return {
                 ...ticket,
                 check_in_id: newCheckIn.transaction_id,
@@ -141,7 +141,7 @@ io.on("connection", (socket) => {
 
           const bracelets = await Promise.all(
             data.bracelets.map(async (bracelet) => {
-              const isDuplicate = await checkForDuplicates(bracelet.code, db.Bracelet);
+              const isDuplicate = await checkForDuplicates(bracelet.code, db.admission_bracelets);
               return {
                 ...bracelet,
                 check_in_id: newCheckIn.transaction_id,
@@ -150,8 +150,8 @@ io.on("connection", (socket) => {
             })
           );
 
-          await db.GtsTicket.bulkCreate(gtsTickets, { transaction: t });
-          await db.Bracelet.bulkCreate(bracelets, { transaction: t });
+          await db.admission_gts_tickets.bulkCreate(gtsTickets, { transaction: t });
+          await db.admission_bracelets.bulkCreate(bracelets, { transaction: t });
 
           return newCheckIn;
         });
@@ -177,8 +177,8 @@ app.use(express.json());
 
 app.get("/api/checkins", async (req, res) => {
   try {
-    const checkIns = await db.CheckIn.findAll({
-      include: [{ model: db.GtsTicket }, { model: db.Bracelet }],
+    const checkIns = await db.admission_check_ins.findAll({
+      include: [{ model: db.admission_gts_tickets }, { model: db.admission_bracelets }],
       order: [["timestamp", "DESC"]],
       where: {
         deleted_at: {
