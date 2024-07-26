@@ -7,7 +7,7 @@ services:
       args:
         NODE_ENV: ${NODE_ENV:-production}
     ports:
-      - "${HOST_PORT:-4443}:${CONTAINER_PORT:-4000}"
+      - PORT_PLACEHOLDER
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - POSTGRES_USER=${POSTGRES_USER}
