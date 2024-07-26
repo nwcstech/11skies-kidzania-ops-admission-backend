@@ -1,20 +1,23 @@
-# Use an official Node runtime as a parent image
+# Use the official Node.js image.
 FROM node:14
 
-# Set the working directory
+# Create and change to the app directory.
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json
+# Copy application dependency manifests to the container image.
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies.
 RUN npm install
 
-# Copy the rest of the application code
+# Copy the local code to the container image.
 COPY . .
 
-# Expose the application port
+# Expose the port the app runs on
 EXPOSE 4000
 
-# Start the application
+# Set environment variable
+ENV NODE_ENV=production
+
+# Run the web service on container startup.
 CMD [ "npm", "start" ]

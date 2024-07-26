@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  return sequelize.define('admission_bracelets', {
+  const Bracelet = sequelize.define('admission_bracelets', {
     code: DataTypes.STRING,
     check_in_id: {
       type: DataTypes.UUID,
@@ -25,4 +25,6 @@ module.exports = (sequelize, DataTypes) => {
     createdAt: 'created_at',
     deletedAt: 'deleted_at'
   });
+
+  return Bracelet;
 };

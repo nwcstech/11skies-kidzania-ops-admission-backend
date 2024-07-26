@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  return sequelize.define('admission_check_ins', {
+  const CheckIn = sequelize.define('admission_check_ins', {
     transaction_id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
@@ -24,4 +24,6 @@ module.exports = (sequelize, DataTypes) => {
     createdAt: 'created_at',
     deletedAt: 'deleted_at'
   });
+
+  return CheckIn;
 };
