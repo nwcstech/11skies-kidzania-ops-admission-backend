@@ -11,14 +11,6 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware to force HTTPS
-app.use((req, res, next) => {
-  if (req.headers['x-forwarded-proto'] !== 'https') {
-    return res.redirect(`https://${req.headers.host}${req.url}`);
-  }
-  next();
-});
-
 const redis = new Redis({
   host: process.env.REDIS_HOST,
   port: process.env.REDIS_PORT,
@@ -48,15 +40,11 @@ db.sequelize.sync().then(() => {
   logger.info('Database synchronized');
 });
 
-// Function to update counts in Redis
-const updateCounts = async () => {
-  const totalGtsTickets = await db.GtsTicket.count();
-  const totalKids = await db.CheckIn.sum('number_of_kids');
-  const totalCheckIns = await db.CheckIn.count();
-
-  await redis.set('totalGtsTickets', totalGtsTickets);
-  await redis.set('totalKids', totalKids);
-  await redis.set('totalCheckIns', totalCheckIns);
+// Function to increment counts in Redis
+const incrementCounts = async (numberOfKids, numberOfGtsTickets) => {
+  await redis.incrby('totalGtsTickets', numberOfGtsTickets);
+  await redis.incrby('totalKids', numberOfKids);
+  await redis.incr('totalCheckIns');
 };
 
 const checkForDuplicates = async (code, table) => {
@@ -129,8 +117,8 @@ io.on('connection', (socket) => {
         await db.GtsTicket.bulkCreate(gtsTickets);
         await db.Bracelet.bulkCreate(bracelets);
 
-        // Update counts in Redis
-        await updateCounts();
+        // Increment counts in Redis
+        await incrementCounts(data.numberOfKids, data.gtsTickets.length);
 
         io.emit('data-synced', checkIn);
         logger.info(
