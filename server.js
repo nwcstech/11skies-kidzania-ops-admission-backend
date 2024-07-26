@@ -20,7 +20,6 @@ const requiredEnvVars = [
   "POSTGRES_HOST",
   "REDIS_HOST",
   "REDIS_PORT",
-  "PORT",
   "NODE_ENV",
 ];
 for (const envVar of requiredEnvVars) {
