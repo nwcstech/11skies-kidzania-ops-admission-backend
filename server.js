@@ -99,9 +99,9 @@ const redis = new Redis({
 });
 
 // Function to increment counts in Redis
-const incrementCounts = async (numberOfKids) => {
+const incrementCounts = async (numberOfKids, gtsTicketCount) => {
   const multi = redis.multi();
-  multi.incr('total_gts_tickets');
+  multi.incrby('total_gts_tickets', gtsTicketCount);
   multi.incrby('total_kids', numberOfKids);
   multi.incr('total_check_ins');
   await multi.exec();
@@ -201,7 +201,7 @@ io.on('connection', (socket) => {
       });
 
       // Increment counts in Redis
-      await incrementCounts(data.numberOfKids);
+      await incrementCounts(data.numberOfKids, data.gtsTickets.length);
 
       io.emit('data-synced', checkIn);
       logger.info(
