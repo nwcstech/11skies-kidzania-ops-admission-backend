@@ -38,24 +38,47 @@ app.use(
 
 db.sequelize.sync().then(() => {
   logger.info('Database synchronized');
+}).catch(error => {
+  logger.error('Database synchronization failed:', error);
+  process.exit(1); // Exit process if DB synchronization fails
 });
 
 // Function to increment counts in Redis
 const incrementCounts = async (numberOfKids, numberOfGtsTickets) => {
-  await redis.incrby('totalGtsTickets', numberOfGtsTickets);
-  await redis.incrby('totalKids', numberOfKids);
-  await redis.incr('totalCheckIns');
+  try {
+    logger.info(`Incrementing counts in Redis: numberOfKids=${numberOfKids}, numberOfGtsTickets=${numberOfGtsTickets}`);
+    await redis.incrby('totalGtsTickets', numberOfGtsTickets);
+    await redis.incrby('totalKids', numberOfKids);
+    await redis.incr('totalCheckIns');
+    logger.info('Counts incremented successfully in Redis');
+  } catch (error) {
+    logger.error('Error incrementing counts in Redis:', error);
+  }
 };
 
 const checkForDuplicates = async (code, table) => {
-  const count = await db[table].count({ where: { code } });
-  return count > 0;
+  try {
+    logger.info(`Checking for duplicates in table=${table} with code=${code}`);
+    const count = await db[table].count({ where: { code } });
+    logger.info(`Duplicate count for code=${code} in table=${table} is ${count}`);
+    return count > 0;
+  } catch (error) {
+    logger.error(`Error checking for duplicates in ${table}:`, error);
+    throw error;
+  }
 };
 
-const server = https.createServer({
-  key: fs.readFileSync('server.key'),
-  cert: fs.readFileSync('server.cert')
-}, app);
+let server;
+try {
+  server = https.createServer({
+    key: fs.readFileSync('server.key'),
+    cert: fs.readFileSync('server.cert')
+  }, app);
+  logger.info('HTTPS server created successfully');
+} catch (error) {
+  logger.error('Failed to create HTTPS server:', error);
+  process.exit(1); // Exit process if HTTPS server creation fails
+}
 
 const io = socketIo(server);
 
@@ -65,27 +88,36 @@ io.on('connection', (socket) => {
 
   // Initial counts fetch from Redis
   const fetchCounts = async () => {
-    const totalGtsTickets = await redis.get('totalGtsTickets');
-    const totalKids = await redis.get('totalKids');
-    const totalCheckIns = await redis.get('totalCheckIns');
+    try {
+      logger.info('Fetching initial counts from Redis');
+      const totalGtsTickets = await redis.get('totalGtsTickets');
+      const totalKids = await redis.get('totalKids');
+      const totalCheckIns = await redis.get('totalCheckIns');
 
-    socket.emit('update-counts', {
-      totalGtsTickets: totalGtsTickets || 0,
-      totalKids: totalKids || 0,
-      totalCheckIns: totalCheckIns || 0,
-    });
+      socket.emit('update-counts', {
+        totalGtsTickets: totalGtsTickets || 0,
+        totalKids: totalKids || 0,
+        totalCheckIns: totalCheckIns || 0,
+      });
+      logger.info('Initial counts fetched and emitted to client');
+    } catch (error) {
+      logger.error('Error fetching counts from Redis:', error);
+    }
   };
 
   fetchCounts();
 
   socket.on('sync-data', async (data) => {
+    logger.info(`Received sync-data event with data: ${JSON.stringify(data)}`);
     try {
       if (data.type === 'checkIn') {
+        logger.info('Processing checkIn data');
         const checkIn = await db.CheckIn.create({
           number_of_kids: data.numberOfKids,
           kidzo_checked: data.kidZoChecked,
           timestamp: new Date(data.timestamp),
         });
+        logger.info(`CheckIn record created with transaction_id: ${checkIn.transaction_id}`);
 
         const gtsTickets = await Promise.all(
           data.gtsTickets.map(async (ticket) => {
@@ -100,6 +132,8 @@ io.on('connection', (socket) => {
             };
           })
         );
+        logger.info('GtsTickets processed successfully');
+
         const bracelets = await Promise.all(
           data.bracelets.map(async (bracelet) => {
             const isDuplicate = await checkForDuplicates(
@@ -113,9 +147,11 @@ io.on('connection', (socket) => {
             };
           })
         );
+        logger.info('Bracelets processed successfully');
 
         await db.GtsTicket.bulkCreate(gtsTickets);
         await db.Bracelet.bulkCreate(bracelets);
+        logger.info('GtsTickets and Bracelets inserted into the database successfully');
 
         // Increment counts in Redis
         await incrementCounts(data.numberOfKids, data.gtsTickets.length);
@@ -126,7 +162,7 @@ io.on('connection', (socket) => {
         );
       }
     } catch (error) {
-      logger.error(`Error inserting data: ${error.message}`);
+      logger.error(`Error processing sync-data: ${error.message}`);
     }
   });
 
@@ -139,6 +175,7 @@ app.use(express.json());
 
 app.get('/api/checkins', async (req, res) => {
   try {
+    logger.info('Fetching check-in records from the database');
     const checkIns = await db.CheckIn.findAll({
       include: [{ model: db.GtsTicket }, { model: db.Bracelet }],
       order: [['timestamp', 'DESC']],
@@ -153,7 +190,7 @@ app.get('/api/checkins', async (req, res) => {
         bracelets: checkIn.Bracelets,
       }))
     );
-    logger.info(`Fetched previous check-ins from IP: ${req.ip}`);
+    logger.info('Check-in records fetched successfully');
   } catch (error) {
     logger.error(`Failed to fetch check-ins: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch check-ins' });
@@ -166,18 +203,25 @@ cron.schedule('0 0 * * *', () => {
 });
 
 const resetCounts = async () => {
-  await redis.set('totalGtsTickets', 0);
-  await redis.set('totalKids', 0);
-  await redis.set('totalCheckIns', 0);
-  logger.info('Counts reset in Redis');
+  try {
+    logger.info('Resetting counts in Redis');
+    await redis.set('totalGtsTickets', 0);
+    await redis.set('totalKids', 0);
+    await redis.set('totalCheckIns', 0);
+    logger.info('Counts reset successfully in Redis');
+  } catch (error) {
+    logger.error('Error resetting counts in Redis:', error);
+  }
 };
 
 app.get('/', (req, res) => {
   res.send('Server is running');
+  logger.info('Root endpoint accessed');
 });
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
+  logger.info('Health check endpoint accessed');
 });
 
 const PORT = process.env.PORT || 4000;
