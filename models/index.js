@@ -1,5 +1,7 @@
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 
 const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_USER, process.env.POSTGRES_PASSWORD, {
   host: process.env.POSTGRES_HOST,
@@ -18,11 +20,18 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-// Fix the require statements
-db.CheckIn = require('./checkin')(sequelize, DataTypes);
-db.GtsTicket = require('./gtsticket')(sequelize, DataTypes);
-db.Bracelet = require('./bracelet')(sequelize, DataTypes);
+const modelsDirectory = __dirname;
 
+fs.readdirSync(modelsDirectory)
+  .filter(file => {
+    return file.indexOf('.') !== 0 && file !== 'index.js' && file.slice(-3) === '.js';
+  })
+  .forEach(file => {
+    const model = require(path.join(modelsDirectory, file))(sequelize, DataTypes);
+    db[model.name] = model;
+  });
+
+// Define associations here if necessary
 db.CheckIn.hasMany(db.GtsTicket, { foreignKey: 'check_in_id' });
 db.CheckIn.hasMany(db.Bracelet, { foreignKey: 'check_in_id' });
 db.GtsTicket.belongsTo(db.CheckIn, { foreignKey: 'check_in_id' });
