@@ -1,31 +1,28 @@
 module.exports = (sequelize, DataTypes) => {
-    const GtsTicket = sequelize.define('GtsTicket', {
-      id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true
-      },
-      code: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      timestamp: {
-        type: DataTypes.DATE,
-        allowNull: false
-      },
-      duplicate: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-      },
-      check_in_id: {
-        type: DataTypes.UUID,
-        references: {
-          model: 'CheckIn',
-          key: 'transaction_id'
-        }
+  return sequelize.define('admission_gts_tickets', {
+    code: DataTypes.STRING,
+    check_in_id: {
+      type: DataTypes.UUID,
+      references: {
+        model: 'admission_check_ins',
+        key: 'transaction_id'
       }
-    });
-  
-    return GtsTicket;
-  };
-  
+    },
+    duplicate: DataTypes.BOOLEAN,
+    created_at: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    },
+    deleted_at: DataTypes.DATE
+  }, {
+    timestamps: true,
+    paranoid: true,
+    updatedAt: 'updated_at',
+    createdAt: 'created_at',
+    deletedAt: 'deleted_at'
+  });
+};

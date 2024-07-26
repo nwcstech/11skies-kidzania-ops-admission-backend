@@ -1,23 +1,13 @@
 const express = require("express");
 const fs = require("fs");
 const https = require("https");
-const http = require("http");
 const socketIo = require("socket.io");
 const Redis = require("ioredis");
 const cron = require("node-cron");
 const morgan = require("morgan");
 const winston = require("winston");
-const { Sequelize } = require("sequelize");
+const db = require("./models");
 require("dotenv").config();
-
-const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_USER, process.env.POSTGRES_PASSWORD, {
-  host: process.env.POSTGRES_HOST,
-  dialect: 'postgres',
-  dialectOptions: {
-    ssl: false, // Disable SSL
-  },
-  logging: console.log, // Enable logging for debugging
-});
 
 // Set up Winston logger
 const logger = winston.createLogger({
@@ -41,9 +31,9 @@ app.use(
 );
 
 // Test DB connection and sync
-sequelize.authenticate().then(() => {
+db.sequelize.authenticate().then(() => {
   logger.info('Database connected successfully');
-  return sequelize.sync();
+  return db.sequelize.sync();
 }).then(() => {
   logger.info("Database synchronized");
 }).catch(error => {
@@ -65,14 +55,14 @@ const redis = new Redis({
 
 // Function to increment counts in Redis
 const incrementCounts = async (numberOfKids) => {
-  await redis.incr("totalGtsTickets");
-  await redis.incrby("totalKids", numberOfKids);
-  await redis.incr("totalCheckIns");
+  await redis.incr("total_gts_tickets");
+  await redis.incrby("total_kids", numberOfKids);
+  await redis.incr("total_check_ins");
 };
 
 // Function to check for duplicates
-const checkForDuplicates = async (code, table) => {
-  const count = await sequelize.models[table].count({ where: { code } });
+const checkForDuplicates = async (code, model) => {
+  const count = await model.count({ where: { code } });
   return count > 0;
 };
 
@@ -83,9 +73,9 @@ io.on("connection", (socket) => {
 
   // Initial counts fetch from Redis
   const fetchCounts = async () => {
-    const totalGtsTickets = await redis.get("totalGtsTickets");
-    const totalKids = await redis.get("totalKids");
-    const totalCheckIns = await redis.get("totalCheckIns");
+    const totalGtsTickets = await redis.get("total_gts_tickets");
+    const totalKids = await redis.get("total_kids");
+    const totalCheckIns = await redis.get("total_check_ins");
 
     socket.emit("update-counts", {
       totalGtsTickets: totalGtsTickets || 0,
@@ -99,7 +89,7 @@ io.on("connection", (socket) => {
   socket.on("sync-data", async (data) => {
     try {
       if (data.type === "checkIn") {
-        const checkIn = await sequelize.models.CheckIn.create({
+        const checkIn = await db.CheckIn.create({
           number_of_kids: data.numberOfKids,
           kidzo_checked: data.kidZoChecked,
           timestamp: new Date(data.timestamp),
@@ -107,7 +97,7 @@ io.on("connection", (socket) => {
 
         const gtsTickets = await Promise.all(
           data.gtsTickets.map(async (ticket) => {
-            const isDuplicate = await checkForDuplicates(ticket.code, "GtsTicket");
+            const isDuplicate = await checkForDuplicates(ticket.code, db.GtsTicket);
             return {
               ...ticket,
               check_in_id: checkIn.transaction_id,
@@ -118,7 +108,7 @@ io.on("connection", (socket) => {
 
         const bracelets = await Promise.all(
           data.bracelets.map(async (bracelet) => {
-            const isDuplicate = await checkForDuplicates(bracelet.code, "Bracelet");
+            const isDuplicate = await checkForDuplicates(bracelet.code, db.Bracelet);
             return {
               ...bracelet,
               check_in_id: checkIn.transaction_id,
@@ -127,8 +117,8 @@ io.on("connection", (socket) => {
           })
         );
 
-        await sequelize.models.GtsTicket.bulkCreate(gtsTickets);
-        await sequelize.models.Bracelet.bulkCreate(bracelets);
+        await db.GtsTicket.bulkCreate(gtsTickets);
+        await db.Bracelet.bulkCreate(bracelets);
 
         // Increment counts in Redis
         await incrementCounts(data.numberOfKids);
@@ -150,9 +140,14 @@ app.use(express.json());
 
 app.get("/api/checkins", async (req, res) => {
   try {
-    const checkIns = await sequelize.models.CheckIn.findAll({
-      include: [{ model: sequelize.models.GtsTicket }, { model: sequelize.models.Bracelet }],
+    const checkIns = await db.CheckIn.findAll({
+      include: [{ model: db.GtsTicket }, { model: db.Bracelet }],
       order: [["timestamp", "DESC"]],
+      where: {
+        deleted_at: {
+          [Op.is]: null
+        }
+      }
     });
     res.json(
       checkIns.map((checkIn) => ({
@@ -160,8 +155,8 @@ app.get("/api/checkins", async (req, res) => {
         timestamp: checkIn.timestamp,
         number_of_kids: checkIn.number_of_kids,
         kidzo_checked: checkIn.kidzo_checked,
-        gtsTickets: checkIn.GtsTickets,
-        bracelets: checkIn.Bracelets,
+        gtsTickets: checkIn.admission_gts_tickets,
+        bracelets: checkIn.admission_bracelets,
       }))
     );
     logger.info(`Fetched previous check-ins from IP: ${req.ip}`);
@@ -177,9 +172,9 @@ cron.schedule("0 0 * * *", () => {
 });
 
 const resetCounts = async () => {
-  await redis.set("totalGtsTickets", 0);
-  await redis.set("totalKids", 0);
-  await redis.set("totalCheckIns", 0);
+  await redis.set("total_gts_tickets", 0);
+  await redis.set("total_kids", 0);
+  await redis.set("total_check_ins", 0);
   logger.info("Counts reset in Redis");
 };
 

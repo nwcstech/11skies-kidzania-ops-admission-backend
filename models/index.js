@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
 const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_USER, process.env.POSTGRES_PASSWORD, {
@@ -18,9 +18,9 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-db.CheckIn = require('./checkIn')(sequelize, Sequelize);
-db.GtsTicket = require('./gtsTicket')(sequelize, Sequelize);
-db.Bracelet = require('./bracelet')(sequelize, Sequelize);
+db.CheckIn = require('./checkin')(sequelize, DataTypes);
+db.GtsTicket = require('./gtsticket')(sequelize, DataTypes);
+db.Bracelet = require('./bracelet')(sequelize, DataTypes);
 
 db.CheckIn.hasMany(db.GtsTicket, { foreignKey: 'check_in_id' });
 db.CheckIn.hasMany(db.Bracelet, { foreignKey: 'check_in_id' });
