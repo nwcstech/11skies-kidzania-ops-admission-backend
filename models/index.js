@@ -6,13 +6,9 @@ const path = require('path');
 const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_USER, process.env.POSTGRES_PASSWORD, {
   host: process.env.POSTGRES_HOST,
   dialect: 'postgres',
-  protocol: 'postgres',
   dialectOptions: {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false
-    }
-  }
+    ssl: false, // Disable SSL
+  },
 });
 
 const db = {};
