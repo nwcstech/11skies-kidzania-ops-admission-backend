@@ -1,6 +1,9 @@
+version: '3.8'
+
 services:
   admission-backend:
     image: admission-backend:${TAG:-latest}
+    container_name: kidzania-park-operation-admission-backend
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,10 +20,8 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
     volumes:
-      - .:/usr/src/app  # Mount the entire project directory
-      - /usr/src/app/node_modules  # Use this to prevent overwriting node_modules
-      - ./logs:/usr/src/app/logs
-      - ./certs:/usr/src/app/certs
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
     networks:
       - backend
     healthcheck:
