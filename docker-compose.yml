@@ -13,9 +13,26 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
+    volumes:
+      - ./logs:/app/logs
+      - ./certs:/app/certs
     networks:
       - kidzania-park-operation_backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    secrets:
+      - db_password
+      - redis_password
 
 networks:
   kidzania-park-operation_backend:
     external: true
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt

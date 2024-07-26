@@ -26,5 +26,3 @@ db.CheckIn.hasMany(db.GtsTicket, { foreignKey: 'check_in_id' });
 db.CheckIn.hasMany(db.Bracelet, { foreignKey: 'check_in_id' });
 db.GtsTicket.belongsTo(db.CheckIn, { foreignKey: 'check_in_id' });
 db.Bracelet.belongsTo(db.CheckIn, { foreignKey: 'check_in_id' });
-
-module.exports = db;
