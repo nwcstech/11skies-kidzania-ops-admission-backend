@@ -22,8 +22,7 @@ const requiredEnvVars = [
   "POSTGRES_HOST",
   "REDIS_HOST",
   "REDIS_PORT",
-  "NODE_ENV",
-  "API_KEY", // Add API_KEY to required environment variables
+  "NODE_ENV"
 ];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
