@@ -7,11 +7,8 @@ module.exports = {
     dialect: 'postgres',
     logging: console.log, // Enable logging
     dialectOptions: {
-      ssl: {
-        require: false,
-        rejectUnauthorized: false
-      }
-    }
+      ssl: false, // Disable SSL
+    },
   },
   test: {
     username: process.env.POSTGRES_USER,
@@ -21,11 +18,8 @@ module.exports = {
     dialect: 'postgres',
     logging: console.log, // Enable logging
     dialectOptions: {
-      ssl: {
-        require: false,
-        rejectUnauthorized: false
-      }
-    }
+      ssl: false, // Disable SSL
+    },
   },
   production: {
     username: process.env.POSTGRES_USER,
@@ -35,10 +29,7 @@ module.exports = {
     dialect: 'postgres',
     logging: console.log, // Enable logging
     dialectOptions: {
-      ssl: {
-        require: false,
-        rejectUnauthorized: false
-      }
-    }
-  }
+      ssl: false, // Disable SSL
+    },
+  },
 };
