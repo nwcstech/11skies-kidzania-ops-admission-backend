@@ -2,14 +2,17 @@ version: '3.8'
 
 services:
   admission-backend:
-    image: ${DOCKER_REGISTRY:-localhost}/admission-backend:${TAG:-latest}
+    image: admission-backend:${TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         NODE_ENV: ${NODE_ENV:-production}
     ports:
-      - "${HOST_PORT:-4443}:${CONTAINER_PORT:-4000}"
+      - target: ${CONTAINER_PORT:-4000}
+        published: ${HOST_PORT:-4443}
+        protocol: tcp
+        mode: host
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -28,7 +31,7 @@ services:
       restart_policy:
         condition: on-failure
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://localhost:${CONTAINER_PORT:-4000}/health || exit 1"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:${CONTAINER_PORT:-4000}/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
