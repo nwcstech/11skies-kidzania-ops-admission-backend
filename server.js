@@ -85,6 +85,7 @@ db.sequelize
 
 // Create HTTPS server and socket.io instance
 const httpsOptions = { key: fs.readFileSync("server.key"), cert: fs.readFileSync("server.cert"), };
+
 const server = https.createServer(httpsOptions, app);
 const io = socketIo(server, {
   cors: {
@@ -104,6 +105,17 @@ const incrementCounts = async (numberOfKids) => {
   multi.incrby('total_kids', numberOfKids);
   multi.incr('total_check_ins');
   await multi.exec();
+  // Emit updated counts to all connected clients
+  const [totalGtsTickets, totalKids, totalCheckIns] = await redis.mget(
+    'total_gts_tickets',
+    'total_kids',
+    'total_check_ins'
+  );
+  io.emit('update-counts', {
+    totalGtsTickets: parseInt(totalGtsTickets) || 0,
+    totalKids: parseInt(totalKids) || 0,
+    totalCheckIns: parseInt(totalCheckIns) || 0,
+  });
 };
 
 // Function to check for duplicates
