@@ -16,6 +16,16 @@ const redis = new Redis({
   port: process.env.REDIS_PORT,
 });
 
+const pub = new Redis({
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+});
+
+const sub = new Redis({
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+});
+
 // Set up Winston logger
 const logger = winston.createLogger({
   level: 'info',
@@ -160,6 +170,15 @@ io.on('connection', (socket) => {
         logger.info(
           `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
         );
+
+        // Publish event to Redis
+        pub.publish('checkInEvent', JSON.stringify({
+          type: 'checkIn',
+          transaction_id: checkIn.transaction_id,
+          numberOfKids: data.numberOfKids,
+          gtsTickets: data.gtsTickets,
+          bracelets: data.bracelets
+        }));
       }
     } catch (error) {
       logger.error(`Error processing sync-data: ${error.message}`);
@@ -226,3 +245,22 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+
+// Subscribe to Redis events
+sub.subscribe('checkInEvent', (err, count) => {
+  if (err) {
+    logger.error('Failed to subscribe to Redis events:', err);
+  } else {
+    logger.info(`Subscribed to ${count} Redis channels.`);
+  }
+});
+
+sub.on('message', (channel, message) => {
+  logger.info(`Received message from channel ${channel}: ${message}`);
+  const event = JSON.parse(message);
+  if (event.type === 'checkIn') {
+    // Handle the checkIn event
+    logger.info(`Handling checkIn event: ${JSON.stringify(event)}`);
+    // Perform additional actions as needed
+  }
+});

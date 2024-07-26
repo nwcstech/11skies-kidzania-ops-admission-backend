@@ -1,16 +1,20 @@
-# Dockerfile
+# Use an official Node runtime as a parent image
 FROM node:14
 
-# Create app directory
+# Set the working directory
 WORKDIR /usr/src/app
 
-# Install app dependencies
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
+# Install dependencies
 RUN npm install
 
-# Bundle app source
+# Copy the rest of the application code
 COPY . .
 
+# Expose the application port
 EXPOSE 4000
+
+# Start the application
 CMD [ "npm", "start" ]
