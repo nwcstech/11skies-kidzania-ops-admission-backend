@@ -5,10 +5,7 @@ const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_US
   host: process.env.POSTGRES_HOST,
   dialect: 'postgres',
   dialectOptions: {
-    ssl: {
-      require: false,
-      rejectUnauthorized: false,
-    },
+    ssl: false, // Disable SSL
   },
   logging: console.log, // Enable logging for testing
 });
