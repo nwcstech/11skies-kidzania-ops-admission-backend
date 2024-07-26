@@ -10,8 +10,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Op } = require('sequelize');
 const db = require('./models');
-require('dotenv').config();
+require('dotenv').config({ path: 'admission-env' }); // Load environment variables from admission-env
 const cors = require('cors'); // Import cors
+const checkApiKey = require('./middleware/checkApiKey'); // Import API key middleware
 
 // Validate environment variables
 const requiredEnvVars = [
@@ -22,6 +23,7 @@ const requiredEnvVars = [
   "REDIS_HOST",
   "REDIS_PORT",
   "NODE_ENV",
+  "API_KEY", // Add API_KEY to required environment variables
 ];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -264,6 +266,27 @@ app.get('/api/checkins', async (req, res) => {
       stack: error.stack,
     });
     res.status(500).json({ error: 'Failed to fetch check-ins' });
+  }
+});
+
+// API to reset counts, protected by API key
+app.post('/api/reset-counts', checkApiKey, async (req, res) => {
+  try {
+    await redis.mset({
+      total_gts_tickets: 0,
+      total_kids: 0,
+      total_check_ins: 0,
+    });
+    logger.info('Counts reset via API');
+    io.emit('update-counts', {
+      totalGtsTickets: 0,
+      totalKids: 0,
+      totalCheckIns: 0,
+    });
+    res.status(200).json({ message: 'Counts reset successfully' });
+  } catch (error) {
+    logger.error(`Failed to reset counts: ${error.message}`);
+    res.status(500).json({ error: 'Failed to reset counts' });
   }
 });
 
