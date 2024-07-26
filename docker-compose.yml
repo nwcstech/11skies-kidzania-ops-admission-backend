@@ -5,14 +5,14 @@ services:
     container_name: "${PREFIX}"
     build: .
     ports:
-      - "4443:4000"  # Map public port 4443 to container port 4000
+      - "4443:4000"
     env_file:
       - ../.admission-env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:5432/$POSTGRES_DB
-      - REDIS_HOST=$REDIS_HOST
-      - REDIS_PORT=$REDIS_PORT
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
     networks:
       - kidzania-park-operation_backend
 
