@@ -13,7 +13,16 @@ const db = require("./models");
 require("dotenv").config();
 
 // Validate environment variables
-const requiredEnvVars = ['DATABASE_URL', 'REDIS_HOST', 'REDIS_PORT', 'PORT', 'NODE_ENV'];
+const requiredEnvVars = [
+  "POSTGRES_DB",
+  "POSTGRES_USER",
+  "POSTGRES_PASSWORD",
+  "POSTGRES_HOST",
+  "REDIS_HOST",
+  "REDIS_PORT",
+  "PORT",
+  "NODE_ENV",
+];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`Missing required environment variable: ${envVar}`);
@@ -44,7 +53,7 @@ app.use(helmet());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
-  message: "Too many requests from this IP, please try again later."
+  message: "Too many requests from this IP, please try again later.",
 });
 app.use(limiter);
 
@@ -56,23 +65,27 @@ app.use(
 );
 
 // Test DB connection and sync
-db.sequelize.authenticate()
+db.sequelize
+  .authenticate()
   .then(() => {
-    logger.info('Database connected successfully');
+    logger.info("Database connected successfully");
     return db.sequelize.sync();
   })
   .then(() => {
     logger.info("Database synchronized");
   })
-  .catch(error => {
-    logger.error(`Database synchronization failed: ${error.message}`, { name: error.name, stack: error.stack });
+  .catch((error) => {
+    logger.error(`Database synchronization failed: ${error.message}`, {
+      name: error.name,
+      stack: error.stack,
+    });
     process.exit(1);
   });
 
 // Create HTTPS server and socket.io instance
 const httpsOptions = {
-  key: fs.readFileSync('server.key'),
-  cert: fs.readFileSync('server.cert')
+  key: fs.readFileSync("server.key"),
+  cert: fs.readFileSync("server.cert"),
 };
 const server = https.createServer(httpsOptions, app);
 const io = socketIo(server);
@@ -104,7 +117,11 @@ io.on("connection", (socket) => {
   // Initial counts fetch from Redis
   const fetchCounts = async () => {
     try {
-      const [totalGtsTickets, totalKids, totalCheckIns] = await redis.mget("total_gts_tickets", "total_kids", "total_check_ins");
+      const [totalGtsTickets, totalKids, totalCheckIns] = await redis.mget(
+        "total_gts_tickets",
+        "total_kids",
+        "total_check_ins"
+      );
       socket.emit("update-counts", {
         totalGtsTickets: parseInt(totalGtsTickets) || 0,
         totalKids: parseInt(totalKids) || 0,
@@ -122,15 +139,21 @@ io.on("connection", (socket) => {
     try {
       if (data.type === "checkIn") {
         const checkIn = await db.sequelize.transaction(async (t) => {
-          const newCheckIn = await db.admission_check_ins.create({
-            number_of_kids: data.numberOfKids,
-            kidzo_checked: data.kidZoChecked,
-            timestamp: new Date(data.timestamp),
-          }, { transaction: t });
+          const newCheckIn = await db.admission_check_ins.create(
+            {
+              number_of_kids: data.numberOfKids,
+              kidzo_checked: data.kidZoChecked,
+              timestamp: new Date(data.timestamp),
+            },
+            { transaction: t }
+          );
 
           const gtsTickets = await Promise.all(
             data.gtsTickets.map(async (ticket) => {
-              const isDuplicate = await checkForDuplicates(ticket.code, db.admission_gts_tickets);
+              const isDuplicate = await checkForDuplicates(
+                ticket.code,
+                db.admission_gts_tickets
+              );
               return {
                 ...ticket,
                 check_in_id: newCheckIn.transaction_id,
@@ -141,7 +164,10 @@ io.on("connection", (socket) => {
 
           const bracelets = await Promise.all(
             data.bracelets.map(async (bracelet) => {
-              const isDuplicate = await checkForDuplicates(bracelet.code, db.admission_bracelets);
+              const isDuplicate = await checkForDuplicates(
+                bracelet.code,
+                db.admission_bracelets
+              );
               return {
                 ...bracelet,
                 check_in_id: newCheckIn.transaction_id,
@@ -150,8 +176,12 @@ io.on("connection", (socket) => {
             })
           );
 
-          await db.admission_gts_tickets.bulkCreate(gtsTickets, { transaction: t });
-          await db.admission_bracelets.bulkCreate(bracelets, { transaction: t });
+          await db.admission_gts_tickets.bulkCreate(gtsTickets, {
+            transaction: t,
+          });
+          await db.admission_bracelets.bulkCreate(bracelets, {
+            transaction: t,
+          });
 
           return newCheckIn;
         });
@@ -160,10 +190,14 @@ io.on("connection", (socket) => {
         await incrementCounts(data.numberOfKids);
 
         io.emit("data-synced", checkIn);
-        logger.info(`Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`);
+        logger.info(
+          `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
+        );
       }
     } catch (error) {
-      logger.error(`Error inserting data: ${error.message}`, { stack: error.stack });
+      logger.error(`Error inserting data: ${error.message}`, {
+        stack: error.stack,
+      });
       socket.emit("sync-error", { message: "Failed to sync data" });
     }
   });
@@ -178,14 +212,17 @@ app.use(express.json());
 app.get("/api/checkins", async (req, res) => {
   try {
     const checkIns = await db.admission_check_ins.findAll({
-      include: [{ model: db.admission_gts_tickets }, { model: db.admission_bracelets }],
+      include: [
+        { model: db.admission_gts_tickets },
+        { model: db.admission_bracelets },
+      ],
       order: [["timestamp", "DESC"]],
       where: {
         deleted_at: {
-          [Op.is]: null
-        }
+          [Op.is]: null,
+        },
       },
-      limit: 100 // Limit the number of results
+      limit: 100, // Limit the number of results
     });
     res.json(
       checkIns.map((checkIn) => ({
@@ -199,7 +236,9 @@ app.get("/api/checkins", async (req, res) => {
     );
     logger.info(`Fetched previous check-ins from IP: ${req.ip}`);
   } catch (error) {
-    logger.error(`Failed to fetch check-ins: ${error.message}`, { stack: error.stack });
+    logger.error(`Failed to fetch check-ins: ${error.message}`, {
+      stack: error.stack,
+    });
     res.status(500).json({ error: "Failed to fetch check-ins" });
   }
 });
@@ -212,9 +251,9 @@ cron.schedule("0 0 * * *", () => {
 const resetCounts = async () => {
   try {
     await redis.mset({
-      "total_gts_tickets": 0,
-      "total_kids": 0,
-      "total_check_ins": 0
+      total_gts_tickets: 0,
+      total_kids: 0,
+      total_check_ins: 0,
     });
     logger.info("Counts reset in Redis");
   } catch (error) {
@@ -232,18 +271,21 @@ app.get("/health", (req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  logger.error(`Unhandled error: ${err.message}`, { name: err.name, stack: err.stack });
+  logger.error(`Unhandled error: ${err.message}`, {
+    name: err.name,
+    stack: err.stack,
+  });
   res.status(500).json({ error: "Internal server error" });
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received. Closing HTTP server.');
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM signal received. Closing HTTP server.");
   server.close(() => {
-    logger.info('HTTP server closed.');
+    logger.info("HTTP server closed.");
     // Close database connection
     db.sequelize.close().then(() => {
-      logger.info('Database connection closed.');
+      logger.info("Database connection closed.");
       process.exit(0);
     });
   });
