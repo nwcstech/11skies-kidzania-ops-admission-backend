@@ -152,67 +152,43 @@ io.on('connection', (socket) => {
 
   socket.on('sync-data', async (data) => {
     try {
-      if (data.type === 'checkIn') {
-        const checkIn = await db.sequelize.transaction(async (t) => {
-          const newCheckIn = await db.admission_check_ins.create(
-            {
-              number_of_kids: data.numberOfKids,
-              kidzo_checked: data.kidZoChecked,
-              timestamp: new Date(data.timestamp),
-            },
-            { transaction: t }
-          );
-
-          const gtsTickets = await Promise.all(
-            data.gtsTickets.map(async (ticket) => {
-              const isDuplicate = await checkForDuplicates(
-                ticket.code,
-                db.admission_gts_tickets
-              );
-              return {
-                ...ticket,
-                check_in_id: newCheckIn.transaction_id,
-                duplicate: isDuplicate,
-              };
-            })
-          );
-
-          const bracelets = await Promise.all(
-            data.bracelets.map(async (bracelet) => {
-              const isDuplicate = await checkForDuplicates(
-                bracelet.code,
-                db.admission_bracelets
-              );
-              return {
-                ...bracelet,
-                check_in_id: newCheckIn.transaction_id,
-                duplicate: isDuplicate,
-              };
-            })
-          );
-
-          await db.admission_gts_tickets.bulkCreate(gtsTickets, {
-            transaction: t,
-          });
-          await db.admission_bracelets.bulkCreate(bracelets, {
-            transaction: t,
-          });
-
-          return newCheckIn;
-        });
-
-        // Increment counts in Redis
-        await incrementCounts(data.numberOfKids);
-
-        io.emit('data-synced', checkIn);
-        logger.info(
-          `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
+      const checkIn = await db.sequelize.transaction(async (t) => {
+        const newCheckIn = await db.admission_check_ins.create(
+          {
+            number_of_kids: data.numberOfKids,
+            kidzo_checked: data.kidZoChecked,
+            timestamp: new Date(data.timestamp),
+          },
+          { transaction: t }
         );
-      }
-    } catch (error) {
-      logger.error(`Error inserting data: ${error.message}`, {
-        stack: error.stack,
+
+        const gtsTickets = await Promise.all(
+          data.gtsTickets.map(async (ticket) => {
+            const isDuplicate = await checkForDuplicates(ticket.code, db.admission_gts_tickets);
+            return { ...ticket, check_in_id: newCheckIn.transaction_id, duplicate: isDuplicate };
+          })
+        );
+
+        const bracelets = await Promise.all(
+          data.bracelets.map(async (bracelet) => {
+            const isDuplicate = await checkForDuplicates(bracelet.code, db.admission_bracelets);
+            return { ...bracelet, check_in_id: newCheckIn.transaction_id, duplicate: isDuplicate };
+          })
+        );
+
+        await db.admission_gts_tickets.bulkCreate(gtsTickets, { transaction: t });
+        await db.admission_bracelets.bulkCreate(bracelets, { transaction: t });
+
+        return newCheckIn;
       });
+
+      // Increment counts in Redis
+      await incrementCounts(data.numberOfKids);
+
+      io.emit('data-synced', checkIn);
+      logger.info(`Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`);
+    } catch (error) {
+      logger.error(`Error inserting data: ${error.message}`, { stack: error.stack });
       socket.emit('sync-error', { message: 'Failed to sync data' });
     }
   });
@@ -251,9 +227,7 @@ app.get('/api/checkins', async (req, res) => {
     );
     logger.info(`Fetched previous check-ins from IP: ${req.ip}`);
   } catch (error) {
-    logger.error(`Failed to fetch check-ins: ${error.message}`, {
-      stack: error.stack,
-    });
+    logger.error(`Failed to fetch check-ins: ${error.message}`, { stack: error.stack });
     res.status(500).json({ error: 'Failed to fetch check-ins' });
   }
 });
@@ -286,10 +260,7 @@ app.get('/health', (req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  logger.error(`Unhandled error: ${err.message}`, {
-    name: err.name,
-    stack: err.stack,
-  });
+  logger.error(`Unhandled error: ${err.message}`, { name: err.name, stack: err.stack });
   res.status(500).json({ error: 'Internal server error' });
 });
 
