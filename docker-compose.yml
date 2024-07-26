@@ -2,14 +2,19 @@ version: '3.8'
 
 services:
   admission-backend:
-    container_name: "${PREFIX}"
-    build: .
+    container_name: "${PREFIX:-admission}-backend-${ENV:-dev}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
+    image: ${DOCKER_REGISTRY:-localhost}/${PREFIX:-admission}-backend:${TAG:-latest}
     ports:
-      - "4443:4000"
+      - "${HOST_PORT:-4443}:${CONTAINER_PORT:-4000}"
     env_file:
       - ../.admission-env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
@@ -19,20 +24,12 @@ services:
     networks:
       - kidzania-park-operation_backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://localhost:4000/health"]
+      test: ["CMD", "curl", "-f", "https://localhost:${CONTAINER_PORT:-4000}/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-    secrets:
-      - db_password
-      - redis_password
+      start_period: 40s
 
 networks:
   kidzania-park-operation_backend:
     external: true
-
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt
-  redis_password:
-    file: ./secrets/redis_password.txt
