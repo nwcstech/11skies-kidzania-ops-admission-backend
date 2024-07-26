@@ -1,138 +1,113 @@
-const fs = require('fs');
-const https = require('https');
-const express = require('express');
-const socketIo = require('socket.io');
-const Redis = require('ioredis');
-const cron = require('node-cron');
-const morgan = require('morgan');
-const winston = require('winston');
-const db = require('./models');
-require('dotenv').config();
+const express = require("express");
+const fs = require("fs");
+const https = require("https");
+const http = require("http");
+const socketIo = require("socket.io");
+const Redis = require("ioredis");
+const cron = require("node-cron");
+const morgan = require("morgan");
+const winston = require("winston");
+const { Sequelize } = require("sequelize");
+require("dotenv").config();
 
-const app = express();
-
-const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-});
-
-const pub = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-});
-
-const sub = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
+const sequelize = new Sequelize(process.env.POSTGRES_DB, process.env.POSTGRES_USER, process.env.POSTGRES_PASSWORD, {
+  host: process.env.POSTGRES_HOST,
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: false, // Disable SSL
+  },
+  logging: console.log, // Enable logging for debugging
 });
 
 // Set up Winston logger
 const logger = winston.createLogger({
-  level: 'debug', // Set log level to debug for detailed logs
+  level: "info",
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'combined.log' }),
+    new winston.transports.File({ filename: "combined.log" }),
   ],
 });
 
 // HTTP request logging
+const app = express();
 app.use(
-  morgan('combined', {
+  morgan("combined", {
     stream: { write: (message) => logger.info(message.trim()) },
   })
 );
 
-db.sequelize.sync().then(() => {
-  logger.info('Database synchronized');
+// Test DB connection and sync
+sequelize.authenticate().then(() => {
+  logger.info('Database connected successfully');
+  return sequelize.sync();
+}).then(() => {
+  logger.info("Database synchronized");
 }).catch(error => {
-  logger.error('Database synchronization failed:', error);
-  process.exit(1); // Exit process if DB synchronization fails
+  logger.error(`Database synchronization failed: ${error.message}`, { name: error.name, stack: error.stack });
+  process.exit(1); // Exit if DB connection fails
 });
 
-const incrementCounts = async (numberOfKids, numberOfGtsTickets) => {
-  try {
-    logger.info(`Incrementing counts in Redis: numberOfKids=${numberOfKids}, numberOfGtsTickets=${numberOfGtsTickets}`);
-    await redis.incrby('totalGtsTickets', numberOfGtsTickets);
-    await redis.incrby('totalKids', numberOfKids);
-    await redis.incr('totalCheckIns');
-    logger.info('Counts incremented successfully in Redis');
-  } catch (error) {
-    logger.error('Error incrementing counts in Redis:', error);
-  }
+// Create HTTPS server and socket.io instance
+const httpsOptions = {
+  key: fs.readFileSync('server.key'),
+  cert: fs.readFileSync('server.cert')
 };
-
-const checkForDuplicates = async (code, table) => {
-  try {
-    logger.info(`Checking for duplicates in table=${table} with code=${code}`);
-    const count = await db[table].count({ where: { code } });
-    logger.info(`Duplicate count for code=${code} in table=${table} is ${count}`);
-    return count > 0;
-  } catch (error) {
-    logger.error(`Error checking for duplicates in ${table}:`, error);
-    throw error;
-  }
-};
-
-let server;
-try {
-  server = https.createServer({
-    key: fs.readFileSync('server.key'),
-    cert: fs.readFileSync('server.cert')
-  }, app);
-  logger.info('HTTPS server created successfully');
-} catch (error) {
-  logger.error('Failed to create HTTPS server:', error);
-  process.exit(1); // Exit process if HTTPS server creation fails
-}
-
+const server = https.createServer(httpsOptions, app);
 const io = socketIo(server);
+const redis = new Redis({
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+});
 
-io.on('connection', (socket) => {
+// Function to increment counts in Redis
+const incrementCounts = async (numberOfKids) => {
+  await redis.incr("totalGtsTickets");
+  await redis.incrby("totalKids", numberOfKids);
+  await redis.incr("totalCheckIns");
+};
+
+// Function to check for duplicates
+const checkForDuplicates = async (code, table) => {
+  const count = await sequelize.models[table].count({ where: { code } });
+  return count > 0;
+};
+
+// Handle socket connections
+io.on("connection", (socket) => {
   const clientIp = socket.handshake.address;
   logger.info(`New client connected from IP: ${clientIp}`);
 
+  // Initial counts fetch from Redis
   const fetchCounts = async () => {
-    try {
-      logger.info('Fetching initial counts from Redis');
-      const totalGtsTickets = await redis.get('totalGtsTickets');
-      const totalKids = await redis.get('totalKids');
-      const totalCheckIns = await redis.get('totalCheckIns');
+    const totalGtsTickets = await redis.get("totalGtsTickets");
+    const totalKids = await redis.get("totalKids");
+    const totalCheckIns = await redis.get("totalCheckIns");
 
-      socket.emit('update-counts', {
-        totalGtsTickets: totalGtsTickets || 0,
-        totalKids: totalKids || 0,
-        totalCheckIns: totalCheckIns || 0,
-      });
-      logger.info('Initial counts fetched and emitted to client');
-    } catch (error) {
-      logger.error('Error fetching counts from Redis:', error);
-    }
+    socket.emit("update-counts", {
+      totalGtsTickets: totalGtsTickets || 0,
+      totalKids: totalKids || 0,
+      totalCheckIns: totalCheckIns || 0,
+    });
   };
 
   fetchCounts();
 
-  socket.on('sync-data', async (data) => {
-    logger.info(`Received sync-data event with data: ${JSON.stringify(data)}`);
+  socket.on("sync-data", async (data) => {
     try {
-      if (data.type === 'checkIn') {
-        logger.info('Processing checkIn data');
-        const checkIn = await db.CheckIn.create({
+      if (data.type === "checkIn") {
+        const checkIn = await sequelize.models.CheckIn.create({
           number_of_kids: data.numberOfKids,
           kidzo_checked: data.kidZoChecked,
           timestamp: new Date(data.timestamp),
         });
-        logger.info(`CheckIn record created with transaction_id: ${checkIn.transaction_id}`);
 
         const gtsTickets = await Promise.all(
           data.gtsTickets.map(async (ticket) => {
-            const isDuplicate = await checkForDuplicates(
-              ticket.code,
-              'GtsTicket'
-            );
+            const isDuplicate = await checkForDuplicates(ticket.code, "GtsTicket");
             return {
               ...ticket,
               check_in_id: checkIn.transaction_id,
@@ -140,14 +115,10 @@ io.on('connection', (socket) => {
             };
           })
         );
-        logger.info('GtsTickets processed successfully');
 
         const bracelets = await Promise.all(
           data.bracelets.map(async (bracelet) => {
-            const isDuplicate = await checkForDuplicates(
-              bracelet.code,
-              'Bracelet'
-            );
+            const isDuplicate = await checkForDuplicates(bracelet.code, "Bracelet");
             return {
               ...bracelet,
               check_in_id: checkIn.transaction_id,
@@ -155,45 +126,33 @@ io.on('connection', (socket) => {
             };
           })
         );
-        logger.info('Bracelets processed successfully');
 
-        await db.GtsTicket.bulkCreate(gtsTickets);
-        await db.Bracelet.bulkCreate(bracelets);
-        logger.info('GtsTickets and Bracelets inserted into the database successfully');
+        await sequelize.models.GtsTicket.bulkCreate(gtsTickets);
+        await sequelize.models.Bracelet.bulkCreate(bracelets);
 
-        await incrementCounts(data.numberOfKids, data.gtsTickets.length);
+        // Increment counts in Redis
+        await incrementCounts(data.numberOfKids);
 
-        io.emit('data-synced', checkIn);
-        logger.info(
-          `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
-        );
-
-        pub.publish('checkInEvent', JSON.stringify({
-          type: 'checkIn',
-          transaction_id: checkIn.transaction_id,
-          numberOfKids: data.numberOfKids,
-          gtsTickets: data.gtsTickets,
-          bracelets: data.bracelets
-        }));
+        io.emit("data-synced", checkIn);
+        logger.info(`Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`);
       }
     } catch (error) {
-      logger.error(`Error processing sync-data: ${error.message}`);
+      logger.error(`Error inserting data: ${error.message}`);
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     logger.info(`Client disconnected from IP: ${clientIp}`);
   });
 });
 
 app.use(express.json());
 
-app.get('/api/checkins', async (req, res) => {
+app.get("/api/checkins", async (req, res) => {
   try {
-    logger.info('Fetching check-in records from the database');
-    const checkIns = await db.CheckIn.findAll({
-      include: [{ model: db.GtsTicket }, { model: db.Bracelet }],
-      order: [['timestamp', 'DESC']],
+    const checkIns = await sequelize.models.CheckIn.findAll({
+      include: [{ model: sequelize.models.GtsTicket }, { model: sequelize.models.Bracelet }],
+      order: [["timestamp", "DESC"]],
     });
     res.json(
       checkIns.map((checkIn) => ({
@@ -205,56 +164,32 @@ app.get('/api/checkins', async (req, res) => {
         bracelets: checkIn.Bracelets,
       }))
     );
-    logger.info('Check-in records fetched successfully');
+    logger.info(`Fetched previous check-ins from IP: ${req.ip}`);
   } catch (error) {
     logger.error(`Failed to fetch check-ins: ${error.message}`);
-    res.status(500).json({ error: 'Failed to fetch check-ins' });
+    res.status(500).json({ error: "Failed to fetch check-ins" });
   }
 });
 
 // Schedule the job to run at midnight every day
-cron.schedule('0 0 * * *', () => {
+cron.schedule("0 0 * * *", () => {
   resetCounts();
 });
 
 const resetCounts = async () => {
-  try {
-    logger.info('Resetting counts in Redis');
-    await redis.set('totalGtsTickets', 0);
-    await redis.set('totalKids', 0);
-    await redis.set('totalCheckIns', 0);
-    logger.info('Counts reset successfully in Redis');
-  } catch (error) {
-    logger.error('Error resetting counts in Redis:', error);
-  }
+  await redis.set("totalGtsTickets", 0);
+  await redis.set("totalKids", 0);
+  await redis.set("totalCheckIns", 0);
+  logger.info("Counts reset in Redis");
 };
 
-app.get('/', (req, res) => {
-  res.send('Server is running');
-  logger.info('Root endpoint accessed');
+app.get("/", (req, res) => {
+  res.send("Server is running");
 });
 
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-  logger.info('Health check endpoint accessed');
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
 });
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
-
-// Subscribe to Redis events
-sub.subscribe('checkInEvent', (err, count) => {
-  if (err) {
-    logger.error('Failed to subscribe to Redis events:', err);
-  } else {
-    logger.info(`Subscribed to ${count} Redis channels.`);
-  }
-});
-
-sub.on('message', (channel, message) => {
-  logger.info(`Received message from channel ${channel}: ${message}`);
-  const event = JSON.parse(message);
-  if (event.type === 'checkIn') {
-    logger.info(`Handling checkIn event: ${JSON.stringify(event)}`);
-  }
-});
