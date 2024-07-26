@@ -1,8 +1,8 @@
-version: '3.9'
+version: '3.8'
 
 services:
   admission-backend:
-    container_name: "${PREFIX}"
+    container_name: "${PREFIX}_admission-backend"
     build: .
     ports:
       - "4443:4000"
@@ -15,6 +15,9 @@ services:
       - REDIS_PORT=${REDIS_PORT}
     networks:
       - kidzania-park-operation_backend
+    depends_on:
+      - redis
+      - postgres
 
 networks:
   kidzania-park-operation_backend:
