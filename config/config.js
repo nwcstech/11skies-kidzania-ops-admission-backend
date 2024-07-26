@@ -5,6 +5,7 @@ module.exports = {
     database: process.env.POSTGRES_DB,
     host: process.env.POSTGRES_HOST,
     dialect: 'postgres',
+    logging: console.log, // Enable logging
     dialectOptions: {
       ssl: {
         require: false,
@@ -18,6 +19,7 @@ module.exports = {
     database: process.env.POSTGRES_DB,
     host: process.env.POSTGRES_HOST,
     dialect: 'postgres',
+    logging: console.log, // Enable logging
     dialectOptions: {
       ssl: {
         require: false,
@@ -31,6 +33,7 @@ module.exports = {
     database: process.env.POSTGRES_DB,
     host: process.env.POSTGRES_HOST,
     dialect: 'postgres',
+    logging: console.log, // Enable logging
     dialectOptions: {
       ssl: {
         require: false,
