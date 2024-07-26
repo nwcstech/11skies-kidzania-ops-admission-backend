@@ -5,7 +5,7 @@ services:
     container_name: "${PREFIX}"
     build: .
     ports:
-      - "4000:4000"
+      - "4443:4000"  # Map public port 4443 to container port 4000
     env_file:
       - ../.admission-env
     environment:
