@@ -17,8 +17,10 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
     volumes:
-      - ./logs:/app/logs
-      - ./certs:/app/certs
+      - .:/usr/src/app  # Mount the entire project directory
+      - /usr/src/app/node_modules  # Use this to prevent overwriting node_modules
+      - ./logs:/usr/src/app/logs
+      - ./certs:/usr/src/app/certs
     networks:
       - backend
     healthcheck:

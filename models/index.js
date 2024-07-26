@@ -18,6 +18,7 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
+// Fix the require statements
 db.CheckIn = require('./checkin')(sequelize, DataTypes);
 db.GtsTicket = require('./gtsticket')(sequelize, DataTypes);
 db.Bracelet = require('./bracelet')(sequelize, DataTypes);
