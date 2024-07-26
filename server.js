@@ -10,7 +10,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Op } = require('sequelize');
 const db = require('./models');
-require('dotenv').config({ path: 'admission-env' }); // Load environment variables from admission-env
+require('dotenv').config({ path: '.admission-env' }); // Load environment variables from admission-env
 const cors = require('cors'); // Import cors
 const checkApiKey = require('./middleware/checkApiKey'); // Import API key middleware
 
