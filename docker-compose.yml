@@ -14,5 +14,5 @@ services:
       - REDIS_HOST=$REDIS_HOST
       - REDIS_PORT=$REDIS_PORT
     depends_on:
-      - db
-      - redis
+      - kidzania-park-operation-postgres
+      - kidzania-park-operation-redis
