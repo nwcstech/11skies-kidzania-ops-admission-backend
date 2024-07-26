@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   admission-backend:
     image: admission-backend:${TAG:-latest}
@@ -9,10 +7,7 @@ services:
       args:
         NODE_ENV: ${NODE_ENV:-production}
     ports:
-      - target: ${CONTAINER_PORT:-4000}
-        published: ${HOST_PORT:-4443}
-        protocol: tcp
-        mode: host
+      - "${HOST_PORT:-4443}:${CONTAINER_PORT:-4000}"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - POSTGRES_USER=${POSTGRES_USER}
