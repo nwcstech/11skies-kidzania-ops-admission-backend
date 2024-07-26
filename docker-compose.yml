@@ -7,7 +7,7 @@ services:
     ports:
       - "4000:4000"
     env_file:
-      - .admission-env
+      - ../.admission-env
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:5432/$POSTGRES_DB
