@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   admission-backend:
-    container_name: kidzania-park-operation-admission-backend
+    container_name: ${PREFIX}-admission-backend
     build: .
     ports:
       - "4000:4000"
@@ -13,3 +13,6 @@ services:
       - DATABASE_URL=postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:5432/$POSTGRES_DB
       - REDIS_HOST=$REDIS_HOST
       - REDIS_PORT=$REDIS_PORT
+    depends_on:
+      - db
+      - redis
