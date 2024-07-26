@@ -28,7 +28,7 @@ const sub = new Redis({
 
 // Set up Winston logger
 const logger = winston.createLogger({
-  level: 'info',
+  level: 'debug', // Set log level to debug for detailed logs
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
@@ -53,7 +53,6 @@ db.sequelize.sync().then(() => {
   process.exit(1); // Exit process if DB synchronization fails
 });
 
-// Function to increment counts in Redis
 const incrementCounts = async (numberOfKids, numberOfGtsTickets) => {
   try {
     logger.info(`Incrementing counts in Redis: numberOfKids=${numberOfKids}, numberOfGtsTickets=${numberOfGtsTickets}`);
@@ -96,7 +95,6 @@ io.on('connection', (socket) => {
   const clientIp = socket.handshake.address;
   logger.info(`New client connected from IP: ${clientIp}`);
 
-  // Initial counts fetch from Redis
   const fetchCounts = async () => {
     try {
       logger.info('Fetching initial counts from Redis');
@@ -163,7 +161,6 @@ io.on('connection', (socket) => {
         await db.Bracelet.bulkCreate(bracelets);
         logger.info('GtsTickets and Bracelets inserted into the database successfully');
 
-        // Increment counts in Redis
         await incrementCounts(data.numberOfKids, data.gtsTickets.length);
 
         io.emit('data-synced', checkIn);
@@ -171,7 +168,6 @@ io.on('connection', (socket) => {
           `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
         );
 
-        // Publish event to Redis
         pub.publish('checkInEvent', JSON.stringify({
           type: 'checkIn',
           transaction_id: checkIn.transaction_id,
@@ -259,8 +255,6 @@ sub.on('message', (channel, message) => {
   logger.info(`Received message from channel ${channel}: ${message}`);
   const event = JSON.parse(message);
   if (event.type === 'checkIn') {
-    // Handle the checkIn event
     logger.info(`Handling checkIn event: ${JSON.stringify(event)}`);
-    // Perform additional actions as needed
   }
 });
