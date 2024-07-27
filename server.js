@@ -10,9 +10,10 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Op } = require('sequelize');
 const db = require('./models');
-require('dotenv').config({ path: '.admission-env' }); // Load environment variables from admission-env
-const cors = require('cors'); // Import cors
-const checkApiKey = require('./middleware/checkApiKey'); // Import API key middleware
+require('dotenv').config({ path: '.admission-env' });
+const cors = require('cors');
+const checkApiKey = require('./middleware/checkApiKey');
+const activityRoutes = require('./activityRoutes');
 
 // Validate environment variables
 const requiredEnvVars = [
@@ -23,7 +24,7 @@ const requiredEnvVars = [
   "REDIS_HOST",
   "REDIS_PORT",
   "NODE_ENV",
-  "API_KEY", // Add API_KEY to required environment variables
+  "API_KEY",
 ];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -56,8 +57,8 @@ app.use(cors());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Too many requests from this IP, please try again later.',
 });
 app.use(limiter);
@@ -91,7 +92,7 @@ const httpsOptions = { key: fs.readFileSync("server.key"), cert: fs.readFileSync
 const server = https.createServer(httpsOptions, app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:4200", // Allow your Angular app's origin
+    origin: "http://localhost:4200",
     methods: ["GET", "POST"]
   }
 });
@@ -153,6 +154,7 @@ io.on('connection', (socket) => {
   fetchCounts();
 
   socket.on('sync-data', async (data) => {
+    logger.info(`Received sync-data event with data: ${JSON.stringify(data)}`);
     try {
       const checkIn = await db.sequelize.transaction(async (t) => {
         const newCheckIn = await db.admission_check_ins.create(
@@ -206,14 +208,90 @@ io.on('connection', (socket) => {
       await incrementCounts(data.numberOfKids, data.gtsTickets.length);
 
       io.emit('data-synced', checkIn);
+      socket.emit('check-in-response', { success: true, checkIn });
       logger.info(
         `Data synced for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
       );
     } catch (error) {
       logger.error(`Error inserting data: ${error.message}`, {
         stack: error.stack,
+        data: JSON.stringify(data)
       });
-      socket.emit('sync-error', { message: 'Failed to sync data' });
+      socket.emit('check-in-response', { 
+        success: false, 
+        error: 'Failed to sync data',
+        details: error.message
+      });
+    }
+  });
+
+  socket.on('check-in', async (data, callback) => {
+    logger.info(`Received check-in event with data: ${JSON.stringify(data)}`);
+    try {
+      const checkIn = await db.sequelize.transaction(async (t) => {
+        const newCheckIn = await db.admission_check_ins.create(
+          {
+            number_of_kids: data.numberOfKids,
+            kidzo_checked: data.kidZoChecked,
+            timestamp: new Date(data.timestamp),
+          },
+          { transaction: t }
+        );
+
+        const gtsTickets = await Promise.all(
+          data.gtsTickets.map(async (ticket) => {
+            const isDuplicate = await checkForDuplicates(
+              ticket.code,
+              db.admission_gts_tickets
+            );
+            return {
+              ...ticket,
+              check_in_id: newCheckIn.transaction_id,
+              duplicate: isDuplicate,
+            };
+          })
+        );
+
+        const bracelets = await Promise.all(
+          data.bracelets.map(async (bracelet) => {
+            const isDuplicate = await checkForDuplicates(
+              bracelet.code,
+              db.admission_bracelets
+            );
+            return {
+              ...bracelet,
+              check_in_id: newCheckIn.transaction_id,
+              duplicate: isDuplicate,
+            };
+          })
+        );
+
+        await db.admission_gts_tickets.bulkCreate(gtsTickets, {
+          transaction: t,
+        });
+        await db.admission_bracelets.bulkCreate(bracelets, {
+          transaction: t,
+        });
+
+        return newCheckIn;
+      });
+
+      await incrementCounts(data.numberOfKids, data.gtsTickets.length);
+
+      callback({ success: true, checkIn });
+      logger.info(
+        `Check-in successful for transaction: ${checkIn.transaction_id} from IP: ${clientIp}`
+      );
+    } catch (error) {
+      logger.error(`Check-in error: ${error.message}`, {
+        stack: error.stack,
+        data: JSON.stringify(data)
+      });
+      callback({ 
+        success: false, 
+        error: 'Check-in failed',
+        details: error.message
+      });
     }
   });
 
@@ -234,6 +312,7 @@ io.on('connection', (socket) => {
 });
 
 app.use(express.json());
+app.use('/api', activityRoutes);
 
 app.get('/api/checkins', async (req, res) => {
   try {
@@ -248,7 +327,7 @@ app.get('/api/checkins', async (req, res) => {
           [Op.is]: null,
         },
       },
-      limit: 100, // Limit the number of results
+      limit: 100,
     });
     res.json(
       checkIns.map((checkIn) => ({
