@@ -427,6 +427,33 @@ app.post('/api/reset-counts', checkApiKey, async (req, res) => {
   }
 });
 
+app.get('/api/est-configs', async (req, res) => {
+  try {
+    const configs = await db.FIBConfig.findAll({
+      where: {
+        is_published: true,
+        publish_at: {
+          [Op.lte]: new Date()
+        }
+      },
+      order: [['publish_at', 'DESC']],
+      limit: 100 // Limit the number of results
+    });
+
+    const transformedConfigs = configs.map(config => ({
+      id: config.id,
+      hostname: config.hostname,
+      config: config.config,
+      publishedAt: config.publish_at
+    }));
+
+    res.json(transformedConfigs);
+  } catch (error) {
+    logger.error('Error fetching configs:', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
 // Schedule the job to run at midnight every day
 cron.schedule('0 0 * * *', () => {
   resetCounts();

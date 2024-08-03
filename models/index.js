@@ -40,4 +40,11 @@ if (db.activity_sessions && db.establishments) {
   db.establishments.hasMany(db.activity_sessions, { foreignKey: 'establishment_id' });
 }
 
+// You can add any associations for FIBConfig here if needed
+// For example:
+// if (db.FIBConfig && db.SomeOtherModel) {
+//   db.FIBConfig.belongsTo(db.SomeOtherModel);
+//   db.SomeOtherModel.hasMany(db.FIBConfig);
+// }
+
 module.exports = db;
