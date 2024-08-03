@@ -1,29 +1,51 @@
 module.exports = (sequelize, DataTypes) => {
-    const ActivitySession = sequelize.define('activity_sessions', {
+  const ActivitySession = sequelize.define('activity_sessions', {
       id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
+          type: DataTypes.UUID,
+          defaultValue: DataTypes.UUIDV4,
+          primaryKey: true
       },
       establishment_id: {
-        type: DataTypes.STRING,
-        allowNull: false
+          type: DataTypes.STRING(255),
+          allowNull: false
       },
       activity_name: {
-        type: DataTypes.STRING,
-        allowNull: false
+          type: DataTypes.STRING(255),
+          allowNull: false
       },
       start_time: {
-        type: DataTypes.DATE,
-        allowNull: false
+          type: DataTypes.DATE,
+          allowNull: false
       },
-      end_time: DataTypes.DATE,
+      end_time: {
+          type: DataTypes.DATE,
+          allowNull: true
+      },
       status: {
-        type: DataTypes.ENUM('active', 'completed'),
-        defaultValue: 'active'
+          type: DataTypes.STRING(20),
+          allowNull: false,
+          defaultValue: 'active'
       },
-      guests: DataTypes.JSONB
-    });
-  
-    return ActivitySession;
-  };
+      guests: {
+          type: DataTypes.JSONB,
+          allowNull: true
+      },
+      created_at: {
+          type: DataTypes.DATE,
+          allowNull: false,
+          defaultValue: DataTypes.NOW
+      },
+      updated_at: {
+          type: DataTypes.DATE,
+          allowNull: false,
+          defaultValue: DataTypes.NOW
+      }
+  }, {
+      timestamps: true,
+      underscored: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
+  });
+
+  return ActivitySession;
+};
