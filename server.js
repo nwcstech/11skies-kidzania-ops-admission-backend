@@ -315,7 +315,7 @@ app.use(express.json());
 app.use('/api', activityRoutes);
 
 // New routes for activity sessions
-app.post('/api/activity-sessions', async (req, res) => {
+app.post('/api/est-activity-sessions', async (req, res) => {
   try {
     const sessionData = req.body;
     // Ensure activity_name is provided instead of activity_id
