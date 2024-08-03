@@ -35,4 +35,9 @@ if (db.admission_check_ins) {
   db.admission_bracelets.belongsTo(db.admission_check_ins, { foreignKey: 'check_in_id' });
 }
 
+if (db.activity_sessions && db.establishments) {
+  db.activity_sessions.belongsTo(db.establishments, { foreignKey: 'establishment_id' });
+  db.establishments.hasMany(db.activity_sessions, { foreignKey: 'establishment_id' });
+}
+
 module.exports = db;

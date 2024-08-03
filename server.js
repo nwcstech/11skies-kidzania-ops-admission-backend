@@ -314,6 +314,64 @@ io.on('connection', (socket) => {
 app.use(express.json());
 app.use('/api', activityRoutes);
 
+// New routes for activity sessions
+app.post('/api/activity-sessions', async (req, res) => {
+  try {
+    const sessionData = req.body;
+    // Ensure activity_name is provided instead of activity_id
+    if (!sessionData.activity_name) {
+      return res.status(400).json({ error: 'Activity name is required' });
+    }
+    const newSession = await db.activity_sessions.create(sessionData);
+    res.status(201).json({ sessionId: newSession.id, message: 'Activity session started successfully' });
+  } catch (error) {
+    logger.error('Error starting activity session:', error);
+    res.status(500).json({ error: 'Failed to start activity session' });
+  }
+});
+
+app.put('/api/activity-sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const updateData = req.body;
+    const session = await db.activity_sessions.findByPk(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    await session.update(updateData);
+    res.status(200).json({ message: 'Activity session updated successfully' });
+  } catch (error) {
+    logger.error('Error updating activity session:', error);
+    res.status(500).json({ error: 'Failed to update activity session' });
+  }
+});
+
+app.post('/api/sync-offline', async (req, res) => {
+  try {
+    const offlineData = req.body;
+    for (const item of offlineData) {
+      if (item.action === 'start') {
+        // Ensure activity_name is used instead of activity_id
+        if (!item.data.activity_name) {
+          logger.warn('Skipping offline session start due to missing activity name');
+          continue;
+        }
+        await db.activity_sessions.create(item.data);
+      } else if (item.action === 'stop') {
+        const session = await db.activity_sessions.findByPk(item.sessionId);
+        if (session) {
+          await session.update(item.data);
+        }
+      }
+    }
+    res.status(200).json({ message: 'Offline data synced successfully' });
+  } catch (error) {
+    logger.error('Error syncing offline data:', error);
+    res.status(500).json({ error: 'Failed to sync offline data' });
+  }
+});
+
 app.get('/api/checkins', async (req, res) => {
   try {
     const checkIns = await db.admission_check_ins.findAll({
