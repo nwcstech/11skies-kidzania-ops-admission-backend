@@ -14,6 +14,8 @@ require('dotenv').config({ path: '.admission-env' });
 const cors = require('cors');
 const checkApiKey = require('./middleware/checkApiKey');
 const activityRoutes = require('./activityRoutes');
+const moment = require('moment-timezone');
+const { NtpTimeSync } = require('ntp-time-sync');
 
 // Validate environment variables
 const requiredEnvVars = [
@@ -100,6 +102,9 @@ const redis = new Redis({
   host: process.env.REDIS_HOST,
   port: process.env.REDIS_PORT,
 });
+
+// Initialize NTP client
+const ntpClient = NtpTimeSync.getInstance();
 
 // Function to increment counts in Redis
 const incrementCounts = async (numberOfKids, gtsTicketCount) => {
@@ -439,7 +444,6 @@ app.get('/api/est-configs', async (req, res) => {
 });
 
 // Utility function to transform config data
-// Utility function to transform config data
 const transformConfig = (configData) => {
   // If configData is from the database, it might have a 'config' property
   const data = configData.config || configData;
@@ -461,11 +465,7 @@ const transformConfig = (configData) => {
   };
 };
 
-// Schedule the job to run at midnight every day
-cron.schedule('0 0 * * *', () => {
-  resetCounts();
-});
-
+// Function to reset counts
 const resetCounts = async () => {
   try {
     await redis.mset({
@@ -474,10 +474,62 @@ const resetCounts = async () => {
       total_check_ins: 0,
     });
     logger.info('Counts reset in Redis');
+    io.emit('update-counts', {
+      totalGtsTickets: 0,
+      totalKids: 0,
+      totalCheckIns: 0,
+    });
   } catch (error) {
     logger.error(`Failed to reset counts: ${error.message}`);
   }
 };
+
+// Function to get the current time from NTP server
+const getNtpTime = async () => {
+  try {
+    const result = await ntpClient.getTime();
+    return result.now;
+  } catch (error) {
+    logger.error(`Failed to get NTP time: ${error.message}`);
+    return new Date(); // Fallback to system time if NTP fails
+  }
+};
+
+// Function to schedule the next reset
+const scheduleNextReset = async () => {
+  try {
+    const ntpDate = await getNtpTime();
+    const now = moment(ntpDate).tz('Asia/Singapore');
+    
+    const resetTimes = [
+      moment(now).startOf('day'),                                  // 00:00
+      moment(now).startOf('day').add(1, 'hours').add(30, 'minutes'), // 01:30
+      moment(now).startOf('day').add(9, 'hours').add(30, 'minutes'), // 09:30
+      moment(now).startOf('day').add(14, 'hours')                    // 14:00
+    ];
+    
+    let nextReset = resetTimes.find(time => time.isAfter(now));
+    if (!nextReset) {
+      nextReset = moment(resetTimes[0]).add(1, 'day');
+    }
+    
+    const msUntilNextReset = nextReset.diff(now);
+    
+    setTimeout(() => {
+      resetCounts();
+      scheduleNextReset();
+    }, msUntilNextReset);
+    
+    logger.info(`Next reset scheduled for ${nextReset.format()} (in ${msUntilNextReset / 1000 / 60} minutes)`);
+  } catch (error) {
+    logger.error(`Failed to schedule next reset: ${error.message}`);
+    // Retry after 1 minute if there's an error
+    setTimeout(scheduleNextReset, 60000);
+  }
+};
+
+// Start the scheduling process
+scheduleNextReset();
 
 app.get('/', (req, res) => {
   res.send('Server is running');
