@@ -15,6 +15,9 @@ const checkApiKey = require("./middleware/checkApiKey");
 const activityRoutes = require("./activityRoutes");
 const moment = require("moment-timezone");
 
+// Set default timezone
+moment.tz.setDefault("Asia/Singapore");
+
 // Validate environment variables
 const requiredEnvVars = [
   "POSTGRES_DB",
@@ -105,6 +108,24 @@ const redis = new Redis({
   host: process.env.REDIS_HOST,
   port: process.env.REDIS_PORT,
 });
+
+// Function to log current counts
+const logCurrentCounts = async () => {
+  try {
+    const [totalGtsTickets, totalKids, totalCheckIns] = await redis.mget(
+      "total_gts_tickets",
+      "total_kids",
+      "total_check_ins"
+    );
+    logger.info("Current counts:", {
+      totalGtsTickets: parseInt(totalGtsTickets) || 0,
+      totalKids: parseInt(totalKids) || 0,
+      totalCheckIns: parseInt(totalCheckIns) || 0,
+    });
+  } catch (error) {
+    logger.error(`Failed to log current counts: ${error.message}`);
+  }
+};
 
 // Function to increment counts in Redis
 const incrementCounts = async (numberOfKids, gtsTicketCount) => {
@@ -334,12 +355,10 @@ app.post("/api/est-activity-sessions", async (req, res) => {
       return res.status(400).json({ error: "Activity name is required" });
     }
     const newSession = await db.activity_sessions.create(sessionData);
-    res
-      .status(201)
-      .json({
-        sessionId: newSession.id,
-        message: "Activity session started successfully",
-      });
+    res.status(201).json({
+      sessionId: newSession.id,
+      message: "Activity session started successfully",
+    });
   } catch (error) {
     logger.error("Error starting activity session:", error);
     res.status(500).json({ error: "Failed to start activity session" });
@@ -495,6 +514,7 @@ const resetCounts = async () => {
       totalKids: 0,
       totalCheckIns: 0,
     });
+    await logCurrentCounts(); // Log counts after reset
   } catch (error) {
     logger.error(`Failed to reset counts: ${error.message}`);
   }
@@ -502,14 +522,19 @@ const resetCounts = async () => {
 
 // Function to schedule the next reset
 const scheduleNextReset = () => {
-  const now = moment().tz("Asia/Singapore");
+  const now = moment();
+  logger.info(`Current time: ${now.format()}`);
 
   const resetTimes = [
     moment(now).startOf("day"), // 00:00
-    moment(now).startOf("day").add(1, "hours").add(30, "minutes"), // 01:30
+    moment(now).startOf("day").add(2, "hours").add(00, "minutes"), // 01:30
     moment(now).startOf("day").add(9, "hours").add(30, "minutes"), // 09:30
     moment(now).startOf("day").add(14, "hours"), // 14:00
   ];
+
+  resetTimes.forEach((time, index) => {
+    logger.info(`Reset time ${index + 1}: ${time.format()}`);
+  });
 
   let nextReset = resetTimes.find((time) => time.isAfter(now));
   if (!nextReset) {
@@ -518,20 +543,48 @@ const scheduleNextReset = () => {
 
   const msUntilNextReset = nextReset.diff(now);
 
-  setTimeout(() => {
-    resetCounts();
-    scheduleNextReset();
-  }, msUntilNextReset);
-
   logger.info(
     `Next reset scheduled for ${nextReset.format()} (in ${
       msUntilNextReset / 1000 / 60
     } minutes)`
   );
+
+  setTimeout(() => {
+    logger.info(`Executing scheduled reset at ${moment().format()}`);
+    resetCounts()
+      .then(() => {
+        scheduleNextReset();
+      })
+      .catch((error) => {
+        logger.error(`Error during scheduled reset: ${error.message}`);
+        scheduleNextReset(); // Reschedule even if there's an error
+      });
+  }, msUntilNextReset);
 };
 
 // Start the scheduling process
-scheduleNextReset();
+const startScheduling = () => {
+  logger.info("Starting scheduling process");
+  scheduleNextReset();
+
+  // Immediate check
+  const now = moment();
+  const resetTimes = [
+    moment(now).startOf("day"), // 00:00
+    moment(now).startOf("day").add(1, "hours").add(30, "minutes"), // 01:30
+    moment(now).startOf("day").add(9, "hours").add(30, "minutes"), // 09:30
+    moment(now).startOf("day").add(14, "hours"), // 14:00
+  ];
+
+  const immediateReset = resetTimes.find((time) => time.isSame(now, "minute"));
+  if (immediateReset) {
+    logger.info("Executing immediate reset");
+    resetCounts();
+  }
+};
+
+// Add this to log counts every hour for debugging
+setInterval(logCurrentCounts, 60 * 60 * 1000);
 
 app.get("/", (req, res) => {
   res.send("Server is running");
@@ -564,4 +617,7 @@ process.on("SIGTERM", () => {
 });
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
+  startScheduling(); // Start the scheduling process after the server starts
+});
