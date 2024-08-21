@@ -527,9 +527,7 @@ const scheduleNextReset = () => {
 
   const resetTimes = [
     moment(now).startOf("day"), // 00:00
-    moment(now).startOf("day").add(2, "hours").add(00, "minutes"), // 01:30
-    moment(now).startOf("day").add(9, "hours").add(30, "minutes"), // 09:30
-    moment(now).startOf("day").add(14, "hours"), // 14:00
+    // moment(now).startOf("day").add(14, "hours"), // 14:00
   ];
 
   resetTimes.forEach((time, index) => {
